@@ -1,0 +1,81 @@
+.asset-field-wrapper .asset-field {
+  width: 50%;
+}
+
+.asset-field-wrapper .asset-field-buttons {
+  float: right;
+}
+
+.asset-field-wrapper .asset-field-links {
+
+}
+
+body table .asset-field-wrapper .form-item {
+  margin-bottom: 10px;
+}
+
+.asset-image {
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+.asset-image img {
+  vertical-align: bottom;
+  margin-right: 10px;
+}
+
+.asset-field-wrapper .asset-field-button {
+	box-shadow:0 1px 1px #DDDDDD;
+	border-radius:3px;
+	border:1px solid #00ADEE;
+	border-color:#ddd #7BD6F7 #7BD6F7 #ddd;
+	color:#333333;
+	cursor:pointer;
+	padding:5px 10px;
+	background-color:#F4F4F4;
+	background:#ffffff;
+	background:-moz-linear-gradient(top,#ffffff 0%,#f4f4f4 100%);
+	background:-webkit-gradient(linear,left top,left bottom,color-stop(0%,#ffffff),color-stop(100%,#f4f4f4));
+	background:-webkit-linear-gradient(top,#ffffff 0%,#f4f4f4 100%);
+	background:-o-linear-gradient(top,#ffffff 0%,#f4f4f4 100%);
+	background:-ms-linear-gradient(top,#ffffff 0%,#f4f4f4 100%);
+	filter:progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffffff',endColorstr='#f4f4f4',GradientType=0);
+	background:linear-gradient(top,#ffffff 0%,#f4f4f4 100%);
+  margin-left: 20px;
+}
+
+.asset-field-wrapper .asset-field-link {
+  background-position: left center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: bold;
+  margin-right: 20px;
+  padding: 6px 0 6px 15px;
+  text-transform: uppercase;
+}
+
+.asset-field-wrapper .attach-link {
+  background-image: url(../images/link_12x12.png);
+}
+
+.asset-field-wrapper .add-link,
+.asset-field-wrapper .edit-link,
+.asset-field-wrapper .clone-link,
+.asset-field-wrapper .crop-link {
+  background-image: url(../images/document_stroke_12x12.png);
+}
+
+.asset-field-wrapper .attach-link {
+  background-image: url(../images/link_12x12.png);
+}
+
+.asset-field-wrapper .clear-link {
+  background-image: url(../images/x_11x11.png);
+}
+
+.nodequeue-dragdrop .title {
+  display: inline-block;
+  width: 70%;
+  margin-left: 10px;
+}

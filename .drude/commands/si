@@ -1,0 +1,7 @@
+#!/bin/bash
+
+## Runs drush install
+##
+## Usage:   dsh install [site]
+
+dsh drush -l $1 -y si h2o --account-pass=admin --site-name="$1" 

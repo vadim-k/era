@@ -1,0 +1,7 @@
+name = Entity Reference Assistant
+description = Assists attaching entity references.
+core = 7.x
+package = Fields
+dependencies[] = entityreference
+dependencies[] = views
+dependencies[] = colorbox

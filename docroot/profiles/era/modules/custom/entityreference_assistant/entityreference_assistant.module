@@ -1,0 +1,403 @@
+<?php
+/**
+ * Implements hook_permission().
+ */
+function entityreference_assistant_permission() {
+  return array(
+    'attach entity reference' =>  array(
+      'title' => t('Attach entity reference'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function entityreference_assistant_menu() {
+  $items['admin/entityreference_assistant/ajax/%/%'] = array(
+    'page callback' => 'entityreference_assistant_ajax',
+    'access arguments' => array('attach entity reference'),
+    'page arguments' => array(3, 4),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/entityreference_assistant/view/%/%/%/%'] = array(
+    'page callback' => 'entityreference_assistant_view',
+    'access arguments' => array('attach entity reference'),
+    'page arguments' => array(3, 4, 5, 6),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_form_field_ui_field_edit_form_alter().
+ * Add additional setting to entity reference field.
+ */
+function entityreference_assistant_form_field_ui_field_edit_form_alter(&$form, $form_state) {
+  if ($form['#field']['type'] == 'entityreference') {
+    $view_options = entityreference_assistant_get_view_options();
+    $form['instance']['settings']['entityreference_assistant'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Entity reference assistant settings',
+      '#weight' => 15,
+      '#collapsible' => FALSE,
+    );
+
+    $default_value = NULL;
+    if (isset($form_state['build_info']['args'][0]['settings']['entityreference_assistant']['enabled'])) {
+      $default_value = $form_state['build_info']['args'][0]['settings']['entityreference_assistant']['enabled'];
+    }
+    $form['instance']['settings']['entityreference_assistant']['enabled'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable entity reference assistant'),
+      '#description' => t('Check to enable entity reference assistant.'),
+      '#default_value' => $default_value,
+    );
+
+    $default_value = NULL;
+    if (isset($form_state['build_info']['args'][0]['settings']['entityreference_assistant']['reference_type'])) {
+      $default_value = $form_state['build_info']['args'][0]['settings']['entityreference_assistant']['reference_type'];
+    }
+    $form['instance']['settings']['entityreference_assistant']['reference_type'] = array(
+      '#type' => 'select',
+      '#title' => t('Reference Type'),
+      '#options' => array(
+        'node' => 'Node',
+        'file' => 'File',
+        'user' => 'User',
+        'taxonomy_term' => 'Taxonomy Term',
+      ),
+      '#description' => t('The entity type that can be referenced through this field.'),
+      '#default_value' => $default_value,
+    );
+    
+    if ($view_options) {
+      $default_value = NULL;
+      if (isset($form_state['build_info']['args'][0]['settings']['entityreference_assistant']['view'])) {
+        $default_value = $form_state['build_info']['args'][0]['settings']['entityreference_assistant']['view'];
+      }
+      $form['instance']['settings']['entityreference_assistant']['view'] = array(
+        '#type' => 'select',
+        '#title' => t('View'),
+        '#options' => $view_options,
+        '#description' => t('Select entity reference assistant view.'),
+        '#default_value' => $default_value,
+      );
+    }
+  }
+}
+
+/**
+ * Returns applicable view displays.
+ */
+function entityreference_assistant_get_view_options() {
+  $options = array();
+  $views = views_get_enabled_views();
+  if ($views) {
+    foreach ($views as $view) {
+      if (!empty($view->display)) {
+        foreach ($view->display as $display) {
+          if (!empty($display->display_options['path'])) {
+            $options[$view->name . '|' . $display->id] = $view->human_name . ' - ' . $display->display_title;
+          }
+        }
+      }
+    }
+  }
+  return $options;
+}
+
+/**
+ * Sets or checks whether entityreference assistant is active.
+ */
+function entityreference_assistant_is_active($active = NULL) {
+  static $ret_val;
+  if ($active !== NULL) {
+    $ret_val = $active;
+  }
+  return $ret_val;
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function entityreference_assistant_element_info_alter(&$type) {
+  $type['textfield']['#after_build'][] = 'entityreference_assistant_after_build';
+}
+
+/**
+ * Builds entity reference field element.
+ * @see entityreference_assistant_element_info_alter().
+ */
+function entityreference_assistant_after_build($element) {
+  global $base_path;
+  if (!isset($element['#field_name'])
+    || !isset($element['#entity_type'])
+    || !entityreference_assistant_is_enabled($element)
+    || !user_access('attach entity reference')) {
+    return $element;
+  }
+  $reference_type = entityreference_assistant_get_reference_type($element);
+  if (!$reference_type) {
+    return $element;
+  }
+  entityreference_assistant_is_active(TRUE);
+  _colorbox_doheader();
+  list($view_name, $display_name) = entityreference_assistant_get_element_view_display($element);
+  $view_path = $base_path . 'admin/entityreference_assistant/view/' . $view_name . '/' . $display_name;
+  $add_path = entityreference_assistant_get_add_path($reference_type);
+  $module_path = drupal_get_path('module', 'entityreference_assistant');
+  $element['#attributes']['class'][] = 'era-field';
+  $element['#attributes']['data-reference_type'] = $reference_type;
+  $element['#attributes']['data-view_path'] = $view_path;
+  $element['#attributes']['data-add_path'] = $add_path;
+  $element['#attached']['css'][] = $module_path . '/css/entityreference_assistant.css';
+  $element['#attached']['js'][] = $module_path . '/js/entityreference_assistant.js';
+  if (!empty($element['#value']) && preg_match("/(.+)\((\d+)\)/", $element['#value'], $matches)) {
+    $title = $matches[1];
+    $entity_id = $matches[2];
+    $img_src = entityreference_assistant_get_img_src($reference_type, $entity_id);
+    $item = array(
+      'entity_id' => $entity_id,
+      'title' => $title,
+      'img_src' => $img_src,
+      'reference_type' => $reference_type,
+    );
+    entityreference_assistant_add_js_item($item);
+  }
+  return $element;
+}
+
+/**
+ * Checks if entity reference assistant is enabled for element.
+ */
+function entityreference_assistant_is_enabled($element) {
+  $enabled = FALSE;
+  $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
+  if (isset($instance['settings']['entityreference_assistant']['enabled']) && $instance['settings']['entityreference_assistant']['enabled']) {
+    $enabled = TRUE;
+  }
+  return $enabled;
+}
+
+/**
+ * Returns entity reference type.
+ */
+function entityreference_assistant_get_reference_type($element) {
+  $type = NULL;
+  $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
+  if (isset($instance['settings']['entityreference_assistant']['reference_type'])) {
+    $type = $instance['settings']['entityreference_assistant']['reference_type'];
+  }
+  return $type;
+}
+
+/**
+ * Returns add path.
+ */
+function entityreference_assistant_get_add_path($reference_type) {
+  global $base_path;
+  $add_path = '#';
+  switch ($reference_type) {
+    case 'file':
+      $add_path = $base_path . 'file/add';
+      break;
+    case 'node':
+      $add_path = $base_path . 'node/add';
+      break;
+  }
+  drupal_alter('entityreference_assistant_add_path', $$add_path, $reference_type);
+  return $add_path;
+}
+
+/**
+ * Returns view and display names for element.
+ */
+function entityreference_assistant_get_element_view_display($element) {
+  global $base_path;
+  $display_name = NULL;
+  $view_name = NULL;
+  $view_path = '#';
+  $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
+  if (isset($instance['settings']['entityreference_assistant']['view'])) {
+    list($view_name, $display_name) = explode('|', $instance['settings']['entityreference_assistant']['view']);
+    $view = views_get_view($view_name);
+    if (isset($view->display[$display_name])) {
+      $display = $view->display[$display_name];
+    }
+  }
+  return array($view_name, $display_name);
+}
+
+/**
+ * Returns entity ID.
+ */
+function entityreference_assistant_entity_id($entity, $entity_type) {
+  $ids = entity_extract_ids($entity_type, $entity);
+  $entity_id = reset($ids);
+  return $entity_id;
+}
+
+/**
+ * Returns image source.
+ */
+function entityreference_assistant_get_img_src($reference_type, $entity_id) {
+  $img_src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  if (!is_numeric($entity_id)) {
+    return $title;
+  }
+  $data = entityreference_assistant_get_item_data($reference_type, $entity_id);
+  $img_src = !empty($data['img_src']) ? $data['img_src'] : $img_src;
+  return $img_src;
+}
+
+/**
+ * Returns image title.
+ */
+function entityreference_assistant_get_title($reference_type, $entity_id) {
+  $title = NULL;
+  if (!is_numeric($entity_id)) {
+    return $title;
+  }
+  $data = entityreference_assistant_get_item_data($reference_type, $entity_id);
+  $title = !empty($data['title']) ? $data['title'] : NULL;
+  return $title;
+}
+
+
+/**
+ * Returns item data based on $reference_type and $entity_id
+ */
+function entityreference_assistant_get_item_data($reference_type, $entity_id) {
+  $cache = &drupal_static(__FUNCTION__, array());
+  $cid = $reference_type . $entity_id;
+  if (isset($cache[$cid])) {
+    return $cache[$cid];
+  }
+  $context = array(
+    'reference_type' => $reference_type,
+    'entity_id' => $entity_id,
+  );
+  entityreference_assistant_set_item_data($data, $context);
+  $cache[$cid] = $data;
+  return $data;
+}
+
+/**
+ * Sets item data.
+ */
+function entityreference_assistant_set_item_data(&$data, $context) {
+  switch ($context['reference_type']) {
+    case 'file':
+      $image = entity_load_single('file', $context['entity_id']);
+      if ($image) {
+        $data['img_src'] = image_style_url('thumbnail', $image->uri);
+        $data['title'] = $image->filename;
+      }
+      break;
+    case 'node':
+      $node = entity_load_single('node', $context['entity_id']);
+      if ($node) {
+        $data['title'] = $node->title;
+      }
+      break;
+    case 'taxonomy_term':
+      $term = entity_load_single('taxonomy_term', $context['entity_id']);
+      if ($term) {
+        $data['title'] = $term->name;
+      }
+      break;
+    case 'user':
+      $user = entity_load_single('user', $context['entity_id']);
+      if ($user) {
+        $data['title'] = $user->name;
+      }
+      break;
+  }
+  drupal_alter('entityreference_assistant_item_data', $data, $context);
+}
+
+/**
+ * Collects JS data items..
+ */
+function entityreference_assistant_add_js_item($item = array()) {
+  $data = &drupal_static(__FUNCTION__, array());
+  if (!empty($item['reference_type']) && !empty($item['entity_id'])) {
+    $data[] = $item;
+  }
+  return $data;
+}
+
+/**
+ * Returns all JS data items.
+ * @see entityreference_assistant_add_js_item().
+ */
+function entityreference_assistant_get_js_items() {
+  $data = entityreference_assistant_add_js_item();
+  $data = array_values($data);
+  return $data;
+}
+
+/**
+ * Adds JS data items.
+ */
+function entityreference_assistant_preprocess_html(&$vars) {
+  $era = entityreference_assistant_is_active();
+  $close = isset($_GET['close']) ? $_GET['close'] : NULL;
+  $colorbox_page = isset($_GET['colorbox_page']) ? $_GET['colorbox_page'] : NULL;
+  $page_type = isset($_GET['page_type']) ? $_GET['page_type'] : NULL;
+  $context_field_id = isset($_GET['context_field_id']) ? $_GET['context_field_id'] : NULL;
+  $reference_type = isset($_GET['reference_type']) ? $_GET['reference_type'] : NULL;
+
+  $is_view_page = (arg(0) == 'admin' && arg(1) == 'entityreference_assistant' && arg(2) == 'view');
+  
+  if ($era) {
+    $items = entityreference_assistant_get_js_items();
+    $settings = array();
+    $settings['items'] = $items;
+    drupal_add_js(array('era' => $settings), 'setting');
+  }
+  
+  if ($close) {
+    drupal_add_js("
+      close();
+    ", 'inline');
+  }
+
+  if ($colorbox_page || $is_view_page) {
+    if (module_exists('admin_menu')) {
+      admin_menu_suppress();
+    }
+  }
+
+  if ($is_view_page) {
+    $settings = array();
+    $settings['context_field_id'] = $context_field_id;
+    $settings['reference_type'] = $reference_type;
+    drupal_add_js(array('eraView' => $settings), 'setting');
+    $module_path = drupal_get_path('module', 'entityreference_assistant');
+    drupal_add_css($module_path . '/css/entityreference_assistant.view.css');
+    drupal_add_js($module_path . '/js/entityreference_assistant.view.js');
+  }
+}
+
+/**
+ * Ajax menu page callback.
+ */
+function entityreference_assistant_ajax($reference_type, $entity_id) {
+  $img_src = entityreference_assistant_get_img_src($reference_type, $entity_id);
+  $title = entityreference_assistant_get_title($reference_type, $entity_id);
+  $data['entity_id'] = $entity_id;
+  $data['reference_type'] = $reference_type;
+  $data['title'] = $title;
+  $data['img_src'] = $img_src;
+  print drupal_json_encode($data);
+}
+
+/**
+ * Page callback for view
+ */
+function entityreference_assistant_view($view, $display, $reference_type = NULL, $context_field_id = NULL) {
+  $view = views_embed_view($view, $display);
+  return $view;
+}

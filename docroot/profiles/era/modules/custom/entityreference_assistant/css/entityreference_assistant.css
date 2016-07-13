@@ -1,0 +1,57 @@
+.era-field-wrapper .era-field {
+  width: 50%;
+}
+
+.era-field-wrapper .era-field-links {
+
+}
+
+body table .era-field-wrapper .form-item {
+  margin-bottom: 10px;
+}
+
+.era-image {
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+.era-image img {
+  vertical-align: bottom;
+  margin-right: 10px;
+}
+
+.era-field-wrapper .era-field-link {
+  background-position: left center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: bold;
+  margin-right: 20px;
+  padding: 6px 0 6px 20px;
+  text-transform: uppercase;
+}
+.era-field-wrapper .era-field-link:hover {
+  text-decoration: underline;
+}
+
+.era-field-wrapper .attach-link {
+  background-image: url(../images/link.png);
+}
+
+.era-field-wrapper .add-link {
+  background-image: url(../images/add.png);  
+}
+
+.era-field-wrapper .edit-link {
+  background-image: url(../images/edit.png);
+}
+
+.era-field-wrapper .clear-link {
+  background-image: url(../images/clear.png);
+}
+
+.nodequeue-dragdrop .title {
+  display: inline-block;
+  width: 70%;
+  margin-left: 10px;
+}

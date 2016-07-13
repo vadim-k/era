@@ -1,0 +1,8 @@
+name = Fusion Asset Manager
+description = Asset manager
+core = 7.x
+package = Fusion
+version = 7.x-1.0
+project = fusion_asset_manager
+dependencies[] = colorbox
+dependencies[] = plupload

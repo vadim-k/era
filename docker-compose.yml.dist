@@ -1,0 +1,75 @@
+# Docker and Docker Compose based environment for Drupal.
+# See https://github.com/blinkreaction/drude for more information and documentation.
+
+# Web node
+web:
+  hostname: web
+  image: blinkreaction/drupal-apache:2.2-stable
+  ports:
+    - "80:80"
+    - "443:443"
+    # Use IP based mapping when working with multiple projects. See docs (^^) for more details.
+    #- 192.168.10.10:80:80
+    #- 192.168.10.10:443:443
+  volumes:
+    # Project root folder mapping
+    - &project_root ".:/var/www"
+  links:
+    - cli
+  environment:
+    - VIRTUAL_HOST=h2o.drude
+
+# DB node
+db:
+  hostname: db
+  image: blinkreaction/drupal-mysql:5.5
+  ports:
+    - "3306:3306"
+    # Use IP based mapping when working with multiple projects. See docs (^^) for more details.
+    #- 192.168.10.10:3306:3306
+  # DB configuration
+  environment:
+    - MYSQL_ROOT_PASSWORD=admin123
+    - MYSQL_USER=drupal
+    - MYSQL_PASSWORD=123
+    - MYSQL_DATABASE=drupal
+  volumes:
+     # MySQL configuration overrides
+     - "./.drude/etc/mysql/my.cnf:/etc/mysql/conf.d/z_my.cnf"
+
+# CLI node
+# Used for all console commands and tools.
+cli:
+  hostname: cli
+  image: blinkreaction/drupal-cli:stable
+  volumes:
+    # Project root folder mapping
+    - *project_root
+    # PHP FPM configuration overrides
+    - "./.drude/etc/php5/php.ini:/etc/php5/fpm/conf.d/z_php.ini"
+    # PHP CLI configuration overrides
+    - "./.drude/etc/php5/php-cli.ini:/etc/php5/cli/conf.d/z_php.ini"
+    # Host home directory mapping (for SSH keys and ther credentials).
+    # We try to map both options (b2d and Linux). The startup.sh script in cli container will decide which one to use.
+    - /.home:/.home-b2d  # boot2docker-vagrant
+    - ~:/.home-linux   # Linux
+  links:
+    - db
+  environment:
+    # Optional. Specify a custom SSH RSA key name if necessary. Defaults to 'id_rsa'.
+    - SSH_KEY_NAME=id_rsa
+  # Uncomment the next 2 lines to use the shared ssh-agent.
+  # volumes_from:
+  #  - ssh-agent
+
+phpmyadmin:
+  image: dnhsoft/phpmyadmin:latest
+  links:
+   - web
+   - db
+  ports:
+   - "8001:80"
+  environment:
+   DBHOST: db
+   DBUSER: root
+   DBPASS: admin123

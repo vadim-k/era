@@ -1,0 +1,125 @@
+body .block {
+  padding: 0;
+  border: none;
+}
+
+body .main-content {
+  margin: 0;
+}
+
+.asset-manager {
+  position: relative;
+}
+
+.asset-manager .hidden {
+  display: none;
+}
+
+.asset-manager ul.plupload_filelist li {
+  background: none;
+}
+
+.clear-fix {
+  overflow: auto;
+}
+
+.asset-manager .asset-row {
+  clear: both;
+  margin-bottom: 10px;
+}
+
+.asset-manager .asset-field {
+  margin-top: 10px;
+}
+
+.asset-manager .asset-field label {
+  margin-bottom: 5px;
+}
+
+.asset-manager .plupload_progress,
+.asset-manager .plupload_upload_status {
+  display: block
+}
+
+.asset-manager .asset-field input,
+.asset-manager .asset-field textarea {
+  padding: 5px;
+  width: 400px;
+}
+
+.asset-manager .preview {
+  float: left;
+  width: 150px;
+  margin-top: 5px;
+  margin-right: 20px;
+}
+
+.asset-manager .asset-fields {
+  float: left;
+  width: 500px;
+}
+
+.asset-manager .field-error input {
+  border: 1px solid red;
+}
+
+.asset-manager .field-error textarea {
+  border: 1px solid red;
+}
+
+.asset-manager .required .asterisk {
+  color: red;
+}
+
+.asset-manager .form-item label {
+  display: inline-block;
+}
+
+.asset-manager .form-item input, .asset-manager .form-item textarea {
+  display: block;
+}
+
+.asset-manager .plupload_buttons {
+  display: none;
+}
+
+.asset-manager .fieldset{
+  border: none;
+}
+
+.asset-manager .fieldset-content {
+  padding: 0;
+}
+
+.asset-manager .upload-buttons {
+  display: none;
+}
+
+.asset-manager .upload-buttons input {
+  margin-right: 20px;
+}
+
+.asset-manager .plupload_file_progress {
+  float: right;
+  width: 160px;
+}
+
+.asset-manager .plupload_file_progress_container {
+  margin-top: 3px;
+  border: 1px solid #CCC;
+  background: #FFF;
+  padding: 1px;
+}
+
+.asset-manager .plupload_file_progress_bar {
+  display: block;
+  font-size: 0;
+  line-height: 0;
+  height: 10px;
+  background: lightgreen;
+  width: 0;
+}
+
+.asset-manager .plupload_filelist .plupload_file_name {
+  width: auto;
+}

@@ -1,0 +1,8 @@
+#branding, #page-title {
+  display: none;
+}
+
+.view .active,
+body table.views-table tr.active td {
+  background: #d0f4c8;
+}

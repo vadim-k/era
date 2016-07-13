@@ -1,0 +1,44 @@
+diff --git a/plupload.install b/plupload.install
+index 85cddda..6fca7c8 100644
+--- a/plupload.install
++++ b/plupload.install
+@@ -88,7 +88,7 @@ function _plupload_requirements_installed() {
+  */
+ function _plupload_requirements_version() {
+   $library_path = _plupload_library_path();
+-  $jspath = $library_path . '/js/plupload.js';
++  $jspath = $library_path . '/js/plupload.min.js';
+ 
+   // Read contents of Plupload's javascript file.
+   $configcontents = @file_get_contents($jspath);
+diff --git a/plupload.module b/plupload.module
+index e187f7a..9ab9254 100644
+--- a/plupload.module
++++ b/plupload.module
+@@ -313,12 +313,12 @@ function plupload_library() {
+   $libraries['plupload'] = array(
+     'title' => 'Plupload',
+     'website' => 'http://www.plupload.com',
+-    'version' => '1.5.1.1',
++    'version' => '2.1.1',
+     'js' => array(
+       // @todo - only add gears JS if gears is an enabled runtime.
+       // $library_path . '/js/gears_init.js' => array(),
+-      $library_path . '/js/jquery.plupload.queue/jquery.plupload.queue.js' => array(),
+-      $library_path . '/js/plupload.full.js' => array(),
++      $library_path . '/js/plupload.full.min.js' => array(),
++      $library_path . '/js/jquery.plupload.queue/jquery.plupload.queue.min.js' => array(),
+       0 => array(
+         'type' => 'setting',
+         'data' => array(
+@@ -334,8 +334,8 @@ function plupload_library() {
+               'max_file_size' => file_upload_max_size() . 'b',
+               'chunk_size' => parse_size(ini_get('post_max_size')) . 'b',
+               'unique_names' => TRUE,
+-              'flash_swf_url' => file_create_url($library_path . '/js/plupload.flash.swf'),
+-              'silverlight_xap_url' => file_create_url($library_path . '/js/plupload.silverlight.xap'),
++              'flash_swf_url' => file_create_url($library_path . '/js/Moxie.swf'),
++              'silverlight_xap_url' => file_create_url($library_path . '/js/Moxie.xap'),
+             ),
+           ),
+         ),

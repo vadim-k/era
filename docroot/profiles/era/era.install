@@ -1,0 +1,193 @@
+'<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the era installation profile.
+ */
+
+/**
+ * Implements hook_install().
+ *
+ * Performs actions to set up the site for this profile.
+ *
+ * @see system_install()
+ */
+function era_install() {
+  // run the standard install first
+  include_once DRUPAL_ROOT . '/profiles/minimal/minimal.install';
+  minimal_install();
+
+  // Disable the bartic theme.
+  db_update('system')
+    ->fields(array('status' => 0))
+    ->condition('type', 'theme')
+    ->condition('name', array('bartik'))
+    ->execute();
+
+  // Enable the rubik theme.
+  db_update('system')
+    ->fields(array('status' => 1))
+    ->condition('type', 'theme')
+    ->condition('name', array('rubik'))
+    ->execute();
+
+  variable_set('admin_theme', 'rubik');
+  variable_set('theme_default', 'rubik');
+}
+
+/**
+ * Implements hook_install_tasks_alter().
+ */
+function era_install_tasks_alter(&$tasks, $install_state) {
+
+  _era_set_theme('seven');
+
+  $tasks['install_profile_modules']['display_name'] = st('Install Drupal modules');
+
+  $tasks_list = array(
+    'install_select_profile',
+    'install_select_locale',
+    'install_load_profile',
+    'install_verify_requirements',
+    'install_settings_form',
+    'install_system_module',
+    'era_install_syslog',
+    'install_bootstrap_full',
+    'install_profile_modules',
+    'install_import_locales',
+    'era_install_era_modules',
+    'era_rebuild_permissions',
+    'install_configure_form',
+  );
+
+  $index = 0;
+  foreach ($tasks_list as $task_item) {
+    era_install_reorder_task($tasks, $task_item, $index);
+    $index++;
+  }
+}
+
+/**
+ * Moves task in a different position.
+ */
+function era_install_reorder_task(&$tasks, $task, $index = NULL, $sibling_task = NULL, $direction = 1) {
+  static $original_tasks;
+  if (empty($original_tasks)) {
+    $original_tasks = $tasks;
+  }
+  if ($sibling_task) {
+    $index = array_search($sibling_task, array_keys($tasks)) + $direction;
+  }
+  if ($index) {
+    unset($tasks[$task]);
+    $tasks = array_slice($tasks, 0, $index) + array($task => $original_tasks[$task]) + array_slice($tasks, $index);
+  }
+}
+
+/**
+ * Implements hook_install_tasks().
+ */
+function era_install_tasks(&$install_state) {
+  $tasks['era_install_syslog'] = array(
+    'display_name' => st('Install syslog module'),
+  );
+
+  $tasks['era_install_era_modules'] = array(
+    'display_name' => st('Install era modules'),
+    'type' => 'batch',
+  );
+
+  $tasks['era_rebuild_permissions'] = array(
+    'display' => TRUE,
+    'display_name' => st('Rebuild permissions'),
+  );
+
+  return $tasks;
+}
+
+function era_install_syslog() {
+  module_enable(array('syslog'), FALSE);
+}
+
+/**
+ * Task callback: uses Batch API to import modules based on user selection.
+ */
+function era_install_era_modules() {
+  $batch = array();
+  drupal_set_title(st('Install required era modules'));
+  
+  // find modules with era_install=1 in .info
+  $modules = array();
+  $files = system_rebuild_module_data();
+  foreach ($files as $module_name => $module_data) {
+    if (!empty($module_data->info['era_install'])) {
+      $modules[] = $module_name;
+    }
+  }
+
+  if (!empty($modules)) {
+    // Resolve the dependencies now, so that module_enable() doesn't need
+    // to do it later for each individual module (which kills performance).
+    $modules_sorted = array();
+    foreach ($modules as $module) {
+      if ($files[$module]->requires) {
+        // Create a list of dependencies that haven't been installed yet.
+        $dependencies = array_keys($files[$module]->requires);
+        $dependencies = array_filter($dependencies, '_era_filter_dependencies');
+        // Add them to the module list.
+        $modules = array_merge($modules, $dependencies);
+      }
+    }
+    $modules = array_unique($modules);
+    foreach ($modules as $module) {
+      $modules_sorted[$module] = $files[$module]->sort;
+    }
+    arsort($modules_sorted);
+
+    $operations = array();
+
+    // Enable the selected modules.
+    foreach ($modules_sorted as $module => $weight) {
+      $operations[] = array('_era_enable_module', array($module, $files[$module]->info['name']));
+    }
+
+    $operations[] = array('_era_flush_caches', array(t('Flushed caches.')));
+
+    $batch = array(
+      'title' =>  t('Installing era modules'),
+      'operations' => $operations,
+      'file' => drupal_get_path('profile', 'era') . '/era.install_callbacks.inc',
+    );
+  }
+
+  return $batch;
+}
+
+/**
+ * array_filter() callback used to filter out already installed dependencies.
+ */
+function _era_filter_dependencies($dependency) {
+  return !module_exists($dependency);
+}
+
+
+/**
+ * Force-set a theme at any point during the execution of the request.
+ *
+ * Drupal doesn't give us the option to set the theme during the installation
+ * process and forces enable the maintenance theme too early in the request
+ * for us to modify it in a clean way.
+ */
+function _era_set_theme($target_theme) {
+  if ($GLOBALS['theme'] != $target_theme) {
+    unset($GLOBALS['theme']);
+
+    drupal_static_reset();
+    $GLOBALS['conf']['maintenance_theme'] = $target_theme;
+    _drupal_maintenance_theme();
+  }
+}
+
+function era_rebuild_permissions() {
+  node_access_rebuild(FALSE);
+  drupal_set_message(t('Content permissions have been rebuilt.'));
+}

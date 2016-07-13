@@ -1,0 +1,690 @@
+<?php
+/**
+ * @file
+ * Code for the Fusion Asset Manager feature.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function fusion_asset_manager_permission() {
+  return array(
+    'upload assets' =>  array(
+      'title' => t('Upload assets'),
+    ),
+    'attach assets' =>  array(
+      'title' => t('Attach assets'),
+    ),
+    'manage asset manager settings' =>  array(
+      'title' => t('Manage asset manager settings'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function fusion_asset_manager_menu() {
+  $items['admin/assets/upload'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fusion_asset_manager_upload_form'),
+    'access arguments' => array('upload assets'),
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/fusion_asset_manager.upload.inc',
+  );
+  $items['admin/assets/ajax/%/%'] = array(
+    'page callback' => 'fusion_asset_manager_ajax_data',
+    'page arguments' => array(3, 4, 5, 6),
+    'access arguments' => array('attach assets'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/system/assets'] = array(
+    'title' => 'Asset Manager',
+    'description' => 'Configure assets settings.',
+    'file' => 'fusion_asset_manager.admin.inc',
+    'file path' => drupal_get_path('module', 'fusion_asset_manager') . '/includes',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fusion_asset_manager_admin_settings'),
+    'access arguments' => array('manage asset manager settings'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Returns info implemented in hook_fusion_asset_manager_info().
+ * 
+ * @param $type
+ *   (optional) If set, the function returns info for $type.
+ * 
+ * @param $skip_alter
+ *   (optional) If set to TRUE, the function skips calling drupal_alter() on $info.
+ * 
+ * @param $reset
+ *   (optional) If set to TRUE, ignores static cache.
+ */ 
+function fusion_asset_manager_get_info($type = NULL, $skip_alter = FALSE, $reset = FALSE) {
+  $info = &drupal_static(__FUNCTION__, array());
+  
+  if (!$info || $reset) {
+    $info = module_invoke_all('fusion_asset_manager_info');
+    
+    // allow modules and themes to alter info
+    if (!$skip_alter) {
+      drupal_alter('fusion_asset_manager_info', $info);
+    }
+    
+    $default_info = array(
+      'label' => '',
+      'entity_type' => 'node',
+      'attach_button' => FALSE,
+      'add_button' => FALSE,
+      'attach_link' => FALSE,
+      'edit_link' => FALSE,
+      'clear_link' => FALSE,
+      'add_link' => FALSE,
+    );
+    
+    if (count($info)) {
+      // Merge in default values.
+      foreach ($info as $name => $am_info) {
+        $info[$name] += $default_info;
+        $info[$name]['name'] = $name;
+      }
+    }
+  }
+  
+  if ($type) {
+    if (isset($info[$type])) {
+      return $info[$type];
+    }
+    return NULL;
+  }
+  
+  return $info;
+}
+
+/**
+ * Returns all asset properties.
+ */
+function fusion_asset_manager_asset_properties($property, $label = NULL) {
+  $properties = array();
+  if (!$label) {
+    $label = $property;
+  }
+  $info = fusion_asset_manager_get_info();
+  if (!empty($info)) {
+    foreach ($info as $name => $am_info) {
+      $properties[$name] = isset($am_info[$label]) ? $am_info[$label] : $name;
+    }
+  }
+  return $properties;
+}
+
+/**
+ * Implements hook_form_field_ui_field_edit_form_alter().
+ * Add the asset manager setting to an entityreference field.
+ */
+function fusion_asset_manager_form_field_ui_field_edit_form_alter(&$form, $form_state) {
+  if ($form['#field']['type'] == 'entityreference') {
+    $asset_types = fusion_asset_manager_asset_properties('type');
+    if (!empty($asset_types)) {
+      $form['instance']['settings']['fusion_asset_manager_settings'] = array(
+        '#type' => 'fieldset',
+        '#title' => 'Fusion asset manager settings',
+        '#weight' => 15,
+        '#collapsible' => FALSE,
+      );
+      $form['instance']['settings']['fusion_asset_manager_settings']['enabled'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Enable Fusion asset manager'),
+        '#description' => t('Check to enable Fusion asset manager.'),
+        '#default_value' => isset($form_state['build_info']['args'][0]['settings']['fusion_asset_manager_settings']['enabled']) ? $form_state['build_info']['args'][0]['settings']['fusion_asset_manager_settings']['enabled'] : FALSE,
+      );
+
+      $form['instance']['settings']['fusion_asset_manager_settings']['asset_type'] = array(
+        '#type' => 'select',
+        '#title' => t('Asset Type'),
+        '#description' => t('Choose asset type.'),
+        '#options' => $asset_types,
+        '#default_value' => isset($form_state['build_info']['args'][0]['settings']['fusion_asset_manager_settings']['asset_type']) ? $form_state['build_info']['args'][0]['settings']['fusion_asset_manager_settings']['asset_type'] : NULL,
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function fusion_asset_manager_element_info_alter(&$type) {
+  $type['textfield']['#after_build'][] = 'fusion_asset_manager_after_build';
+}
+
+/**
+ * Checks whether element is configured for asset manager.
+ */
+function fusion_asset_manager_is_element_asset_field($element) {
+  $ret_val = FALSE;
+  if (!isset($element['#field_name']) || !isset($element['#entity_type'])) {
+    return $ret_val;
+  }
+  $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
+  if (isset($instance['settings']['fusion_asset_manager_settings']['enabled']) && $instance['settings']['fusion_asset_manager_settings']['enabled']) {
+    $ret_val = TRUE;
+  }
+  return $ret_val;
+}
+
+/**
+ * Returns element asset type.
+ */
+function fusion_asset_manager_element_asset_type($element) {
+  $ret_val = NULL;
+  if (!isset($element['#field_name'])) {
+    return $ret_val;
+  }
+  $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
+  if (isset($instance['settings']['fusion_asset_manager_settings']['asset_type'])) {
+    $ret_val = $instance['settings']['fusion_asset_manager_settings']['asset_type'];
+  }
+  return $ret_val;
+}
+
+/**
+ * Alters entity reference field and turns it into asset field.
+ * @see fusion_asset_manager_element_info_alter().
+ */
+function fusion_asset_manager_after_build($element) {
+  if (!isset($element['#field_name'])) {
+    return $element;
+  }
+  if (fusion_asset_manager_is_element_asset_field($element)) {
+    if (user_access('attach assets')) {
+      $asset_type = fusion_asset_manager_element_asset_type($element);
+      if ($asset_type && !empty($element['#entity'])) {
+        list($reference_entity_id, $reference_entity_title) = fusion_asset_manager_entity_properties($element['#entity']);
+        $reference_entity_type = !empty($element['#entity']->base_type) ? $element['#entity']->base_type : NULL;
+        $module_path = drupal_get_path('module', 'fusion_asset_manager');
+        $element['#attributes']['class'][] = 'asset-field';
+        $element['#attributes']['data-asset_type'] = $asset_type;
+        $element['#attached']['css'][] = $module_path . '/css/fusion_asset_manager.attach.css';
+        $element['#attached']['js'][] = $module_path . '/js/fusion_asset_manager.attach.js';
+        if (!empty($element['#value']) && preg_match("/(.+)\((\d+)\)/", $element['#value'], $matches)) {
+          $title = $matches[1];
+          $entity_id = $matches[2];
+          $img_src = fusion_asset_manager_get_img_src($asset_type, $entity_id);
+          $caption = fusion_asset_manager_get_caption($asset_type, $entity_id, $reference_entity_id, $reference_entity_type);
+          fusion_asset_manager_add_js_item($asset_type, $entity_id, $title, $img_src, $caption);
+        }
+      }
+    }
+  }
+  return $element;
+}
+
+/**
+ * Returns item data based on $asset_type and $entity_id
+ */
+function fusion_asset_manager_get_item_data($asset_type, $entity_id, $reference_entity_id = NULL, $reference_entity_type = NULL) {
+  $cache = &drupal_static(__FUNCTION__, array());
+  $cid = $asset_type . $entity_id . $reference_entity_id . $reference_entity_type;
+  if (isset($cache[$cid])) {
+    return $cache[$cid];
+  }
+  $context = array(
+    'asset_type' => $asset_type,
+    'entity_id' => $entity_id,
+    'reference_entity_id' => $reference_entity_id,
+    'reference_entity_type' => $reference_entity_type,
+  );
+  drupal_alter('fusion_asset_manager_item_data', $data, $context);
+  $cache[$cid] = $data;
+  return $data;
+}
+
+/**
+ * Returns image title.
+ */
+function fusion_asset_manager_get_title($asset_type, $entity_id) {
+  $title = NULL;
+  if (!is_numeric($entity_id)) {
+    return $title;
+  }
+  $data = fusion_asset_manager_get_item_data($asset_type, $entity_id);
+  $title = !empty($data['title']) ? $data['title'] : NULL;
+  return $title;
+}
+
+/**
+ * Returns image caption.
+ */
+function fusion_asset_manager_get_caption($asset_type, $entity_id, $reference_entity_id = NULL, $reference_entity_type = NULL) {
+  $caption = NULL;
+  if (!is_numeric($entity_id)) {
+    return $caption;
+  }
+  $data = fusion_asset_manager_get_item_data($asset_type, $entity_id, $reference_entity_id, $reference_entity_type);
+  $caption = !empty($data['caption']) ? $data['caption'] : NULL;
+  return $caption;
+}
+
+/**
+ * Returns image source.
+ */
+function fusion_asset_manager_get_img_src($asset_type, $entity_id) {
+  $img_src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  if (!is_numeric($entity_id)) {
+    return $title;
+  }
+  $data = fusion_asset_manager_get_item_data($asset_type, $entity_id);
+  $img_src = !empty($data['img_src']) ? $data['img_src'] : $img_src;
+  return $img_src;
+}
+
+/**
+ * Collects image data for passing to JS settings.
+ */
+function fusion_asset_manager_add_js_item($asset_type = NULL, $entity_id = NULL, $title = NULL, $img_src = NULL, $caption = NULL) {
+  $data = &drupal_static(__FUNCTION__, array());
+  if ($asset_type && $entity_id) {
+    $data[] = array(
+      'entityId' => $entity_id,
+      'title' => $title,
+      'imgSrc' => $img_src,
+      'assetType' => $asset_type,
+      'caption' => $caption,
+    );
+  }
+  return $data;
+}
+
+/**
+ * Returns items collected in fusion_asset_manager_add_js_item().
+ */
+function fusion_asset_manager_get_js_items() {
+  $data = fusion_asset_manager_add_js_item();
+  $data = array_values($data);
+  return $data;
+}
+
+/**
+ * Implements hook_init().
+ */
+function fusion_asset_manager_init() {
+  $colorbox = isset($_GET['colorbox']) ? $_GET['colorbox'] : null;
+  if ($colorbox && module_exists('admin_menu')) {
+    admin_menu_suppress();
+  }
+}
+
+/**
+ * Attaches CSS and JS for iframe pages opened in colorbox,
+ * and removes unnecessary page elements.
+ */
+function fusion_asset_manager_preprocess_html(&$vars) {
+  $colorbox = isset($_GET['colorbox']) ? $_GET['colorbox'] : null;
+  $context_field_id = arg(4);
+  $asset_type = arg(3);
+  $title = isset($_GET['field_title']) ? $_GET['field_title'] : NULL;
+  $entity_id = isset($_GET['entity_id']) ? $_GET['entity_id'] : NULL;
+  $close = isset($_GET['close']) ? $_GET['close'] : NULL;
+  $reference_entity_id = '';
+  $reference_entity_type = '';
+  if (arg(0) == 'node' && is_numeric(arg(1))) {
+    $reference_entity_id = arg(1);
+    $reference_entity_type = 'node';
+  }
+  else if (arg(0) == 'taxonomy' && arg(1) == 'term' && is_numeric(arg(2))) {
+    $reference_entity_id = arg(2);
+    $reference_entity_type = 'taxonomy_term';
+  }
+
+  $is_view_page = fusion_asset_manager_is_view_page();
+
+  $info = fusion_asset_manager_get_info();
+  
+  if ($colorbox) {
+    if (module_exists('admin_menu')) {
+      admin_menu_suppress();
+    }
+    $module_path = drupal_get_path('module', 'fusion_asset_manager');
+    drupal_add_css($module_path . '/css/fusion_asset_manager.view.css');
+    if (isset($vars['page']['page_top'])) {
+      $vars['page']['page_top']['#access'] = FALSE;
+    }
+    if ($close) {
+      fusion_asset_manager_add_colorbox_close_js($context_field_id, $entity_id, $title, $asset_type);
+    }
+  }
+  if ($close) {
+    drupal_add_js("
+      close();
+    ", 'inline');
+  }
+  if ($is_view_page && $colorbox) {
+    $module_path = drupal_get_path('module', 'fusion_asset_manager');
+    drupal_add_css($module_path . '/css/fusion_asset_manager.view.css');
+    drupal_add_js($module_path . '/js/fusion_asset_manager.view.js');
+    $settings = array();
+    $settings['contextFieldId'] = $context_field_id;
+    $settings['assetType'] = $asset_type;
+    $settings['entityType'] = 'file';
+    if (arg(2) == 'images') {
+      $settings['entityType'] = 'file';
+    }
+    if (arg(2) == 'content') {
+      $settings['entityType'] = 'node';
+    }
+    drupal_add_js(array('fusionAssetManagerView' => $settings), 'setting');
+  }
+  $items = fusion_asset_manager_get_js_items();
+  $settings = array();
+  $settings['items'] = $items;
+  $settings['info'] = $info;
+  $settings['reference_entity_id'] = $reference_entity_id;
+  $settings['reference_entity_type'] = $reference_entity_type;
+  $settings['make_image_title_optional'] = variable_get('asset_make_image_title_optional', 0);
+  drupal_add_js(array('fusionAssetManager' => $settings), 'setting');
+}
+
+function fusion_asset_manager_is_view_page() {
+  $ret_val = FALSE;
+  $current_path = current_path();
+  $attach_paths = fusion_asset_manager_asset_properties('attach_path');
+  foreach ($attach_paths as $attach_path) {
+    if (strstr(base_path() . $current_path, $attach_path)) {
+      $ret_val = TRUE;
+      break;
+    }
+  }
+  return $ret_val;
+}
+
+/*
+ * Implements hook_node_update().
+ */
+function fusion_asset_manager_node_update($node) {
+  fusion_asset_manager_entity_change($node);
+}
+
+/*
+ * Implements hook_taxonomy_term_update().
+ */
+function fusion_asset_manager_taxonomy_term_update($term) {
+  fusion_asset_manager_entity_change($term);
+}
+
+/*
+ * Implements hook_file_update().
+ */
+function fusion_asset_manager_file_update($file) {
+  fusion_asset_manager_entity_change($file);
+}
+
+/**
+ * Returns entity ID.
+ */
+function fusion_asset_manager_id($entity, $entity_type = NULL) {
+  if (!$entity_type) {
+    switch ($entity_type) {
+       default:
+         $entity_id = NULL;
+         break;
+       case 'node':
+         $entity_id = $entity->nid;
+         break;
+       case 'taxonomy_term':
+         $entity_id = $entity->tid;
+         break;
+       case 'user':
+         $entity_id = $entity->uid;
+         break;
+       case 'bean':
+         $entity_id = $entity->bid;
+         break;
+       case 'file':
+         $entity_id = $entity->fid;
+         break;
+    }
+    return $entity_id;
+  }
+  $entity_type = $entity_type ? $entity_type : (isset($entity->base_type) ? $entity->base_type : NULL);
+  $ids = entity_extract_ids($entity_type, $entity);
+  $entity_id = reset($ids);
+  return $entity_id;
+}
+
+/**
+ * Returns entity title.
+ */
+function fusion_asset_manager_title($entity, $entity_type = NULL) {
+  $entity_type = $entity_type ? $entity_type : (isset($entity->base_type) ? $entity->base_type : NULL);
+  switch ($entity_type) {
+    default:
+      $title = NULL;
+      break;
+    case 'node':
+      $title = $entity->title;
+      break;
+    case 'taxonomy_term':
+      $title = $entity->name;
+      break;
+    case 'user':
+      $title = $entity->name;
+      break;
+    case 'bean':
+      $title = $entity->title;
+      break;
+    case 'file':
+      $title = $entity->filename;
+      break;
+  }
+  return $title;
+}
+
+/**
+ * Returns entity ID and title by entity.
+ */
+function fusion_asset_manager_entity_properties($entity) {
+  $base_type = !empty($entity->base_type) ? $entity->base_type : NULL;
+  $entity_id = fusion_asset_manager_id($entity, $base_type);
+  $title = fusion_asset_manager_title($entity, $base_type);
+  return array($entity_id, $title);
+}
+
+/**
+ * Returns asset type by entity.
+ */
+function fusion_asset_manager_asset_type($entity) {
+  $asset_type = NULL;
+  $info = fusion_asset_manager_get_info();
+  if (!empty($info)) {
+    foreach ($info as $name => $am_info) {
+      if ($entity->base_type == $am_info['entity_type']) {
+        $asset_type = $name;
+        break;
+      }
+    }
+  }
+  return $asset_type;
+}
+
+/**
+ * Handles node saving in colorbox iframe.
+ */
+function fusion_asset_manager_entity_change($entity) {
+  $colorbox = isset($_GET['colorbox']) ? $_GET['colorbox'] : null;
+  $context_field_id = isset($_GET['context_field_id']) ? $_GET['context_field_id'] : NULL;
+  if ($colorbox && (arg(2) == 'clone' || arg(2) == 'edit' || arg(3) == 'edit')) {
+    list($entity_id, $title) = fusion_asset_manager_entity_properties($entity);
+    $asset_type = fusion_asset_manager_asset_type($entity);
+    $path = current_path();
+    $url_query = array(
+      'colorbox' => 1,
+      'close' => 1,
+      'context_field_id' => $context_field_id,
+      'entity_id' => $entity_id,
+      'asset_type' => $asset_type,
+      'field_title' => $title,
+    );
+    drupal_register_shutdown_function('fusion_asset_manager_goto', $path, $url_query);
+  }
+}
+
+function fusion_asset_manager_goto($path, $url_query) {
+  drupal_goto($path, array('query' => $url_query));
+}
+
+/**
+ * Adds JS that closes iframe and passes data to parent window. 
+ */
+function fusion_asset_manager_add_colorbox_close_js($context_field_id = NULL, $entity_id = NULL, $title = NULL, $asset_type = NULL) {
+  $settings = array();
+  $settings['contextFieldId'] = $context_field_id;
+  $settings['entityId'] = $entity_id;
+  $settings['title'] = $title;
+  $settings['assetType'] = $asset_type;
+  drupal_add_js(array('fusionAssetManagerClose' => $settings), 'setting');
+  drupal_add_js(drupal_get_path('module', 'fusion_asset_manager') . '/js/fusion_asset_manager.close.js');
+}
+
+/**
+ * Builds file name based on title.
+ */
+function fusion_asset_manager_normalize_file_name($title, $extension) {
+  module_load_include('inc', 'pathauto', 'pathauto');
+  if (is_numeric($title)) {
+    $basename = 'image-' . $title;
+  }
+  else {
+    $basename = pathauto_cleanstring($title);
+    $basename = preg_replace('/[\s]/u', '-', $basename);
+    $basename = str_replace(array(':', '*', '?', '"', '<', '>', '|', ','), '', $basename);
+  }
+  $file_name = $basename . '.' . $extension;
+  return $file_name;
+}
+
+/**
+ * Ajax menu page callback.
+ */
+function fusion_asset_manager_ajax_data($asset_type, $entity_id, $reference_entity_id = NULL, $reference_entity_type = NULL) {
+  $img_src = fusion_asset_manager_get_img_src($asset_type, $entity_id);
+  $title = fusion_asset_manager_get_title($asset_type, $entity_id);
+  $caption = fusion_asset_manager_get_caption($asset_type, $entity_id, $reference_entity_id, $reference_entity_type);
+  $data['entityId'] = $entity_id;
+  $data['assetType'] = $asset_type;
+  $data['title'] = $title;
+  $data['imgSrc'] = $img_src;
+  $data['caption'] = $caption;
+  echo drupal_json_encode($data);
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function fusion_asset_manager_admin_paths() {
+  $paths = array(
+    'entityreference/*' => TRUE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function fusion_asset_manager_form_alter(&$form, &$form_state, $form_id) {
+  if (strstr($form['#form_id'], 'nodequeue') && user_access('attach assets')) {
+    if (arg(2) == 'nodequeue' && is_numeric(arg(3))) {
+      $nodequeue = nodequeue_load(arg(3));
+      if ($nodequeue && !empty($nodequeue->types)) {
+        $module_path = drupal_get_path('module', 'fusion_asset_manager');
+        $form['#attached']['css'][] = $module_path . '/css/fusion_asset_manager.attach.css';
+        $form['#attached']['js'][] = $module_path . '/js/fusion_asset_manager.attach.js';
+        $form['add']['nid']['#attributes']['class'][] = 'asset-field';
+        $form['add']['nid']['#attributes']['data-asset_type']= 'nodequeue';
+        $form['add']['nid']['#attributes']['data-nodequeue_types'] = $nodequeue->types;
+        $form['add']['nid']['#attributes']['placeholder'] = $form['add']['nid']['#default_value'];
+        $form['add']['nid']['#default_value'] = '';
+        if (!empty($form['nodes'])) {
+          foreach (element_children($form['nodes']) as $delta) {
+            $image = fusion_image_get_entity_image('node', $form['nodes'][$delta]['#node']['nid']);
+            if ($image) {
+              $image = theme('image_style', array(
+                'path' => $image->uri,
+                'style_name' => 'tn',
+              ));
+            }
+            $form['nodes'][$delta]['title']['#markup'] = $image . '<span class="title">' . $form['nodes'][$delta]['title']['#markup'] . '</span>';
+          }
+        }
+      }
+    }
+  }
+  // preserve query args
+  if ($form_id == 'views_exposed_form') {
+    $preserve_query_args = array('colorbox', 'context_field_id', 'entity_id', 'field_title');
+    foreach ($preserve_query_args as $arg) {
+      if (isset($_GET[$arg])) {
+        $form[$arg] = array(
+          '#type' => 'hidden',
+          '#value' => $_GET[$arg],
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fusion_status_required_variables_alter().
+ */
+function fusion_asset_manager_fusion_status_required_variables_alter(&$variables) {
+  $variables[] = array(
+    'name' => 'plupload_temporary_uri',
+    'config_path' => 'devel/variable/edit/plupload_temporary_uri',
+  );
+}
+
+/**
+ * Implements hook_fusion_asset_manager_info().
+ */
+function fusion_asset_manager_fusion_asset_manager_info() {
+  $info['image'] = array(
+    'label' => 'Image',
+    'entity_type' => 'file',
+    'attach_path' => '/admin/content/images',
+    'add_path' => '/admin/assets/upload',
+    'attach_button' => FALSE,
+    'add_button' => FALSE,
+    'attach_link' => TRUE,
+    'edit_link' => TRUE,
+    'clone_link' => FALSE,
+    'preview_link' => TRUE,
+    'clear_link' => TRUE,
+    'add_link' => TRUE,
+  );
+  return $info;
+}
+
+/**
+ * Implements hook_fusion_asset_manager_item_data_alter().
+ */
+function fusion_image_fusion_asset_manager_item_data_alter(&$data, $context) {
+  $asset_type = $context['asset_type'];
+  $entity_id = $context['entity_id'];
+  $reference_entity_id = $context['reference_entity_id'];
+  $reference_entity_type = $context['reference_entity_type'];
+  $reference_entity_field = 'field_image';
+  drupal_alter('fusion_image_entity_field', $reference_entity_field, $context);
+  switch($asset_type) {
+    case 'image':
+      $image = fusion_image_get_image($entity_id, $reference_entity_id, $reference_entity_type, $reference_entity_field);
+      if ($image) {
+        $data['img_src'] = image_style_url('scale_sm', $image->uri);
+        $data['title'] = $image->filename;
+        $data['caption'] = $image->caption;
+        $data['credit'] = $image->credit;
+      }
+      break;
+  }
+}

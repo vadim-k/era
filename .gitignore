@@ -1,0 +1,40 @@
+# Ignore OS X Generated Files
+.DS_Store
+
+# Ignore local site settings files
+docroot/sites/*/settings.local.php
+!docroot/sites/example/settings.local.php
+docroot/sites/sites.local.php
+
+# Ignore paths that contain user-generated content.
+docroot/sites/*/files
+docroot/sites/*/private
+
+# Ignore install.php in-case we accidently commit it.
+docroot/install.php
+
+# Ignore eclipse project settings
+.buildpath
+.settings
+.project
+
+# Ignore other code-editor project settings
+.phpintel
+/nbproject/private
+sftp-config.json
+.idea
+*.iml
+
+# Exclude local docker-compse.yml
+docker-compose.yml
+mmdb
+
+# Ignore .orig files
+*.orig
+
+# Ignore sass cache files
+.sass-cache
+
+# Ignore sublime text cache files
+.fuse*
+

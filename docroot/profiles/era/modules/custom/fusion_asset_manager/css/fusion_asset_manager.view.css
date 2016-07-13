@@ -1,0 +1,11 @@
+#branding, #page-title {
+  display: none;
+}
+
+body table.views-table tr.active td {
+	background: #d0f4c8;
+}
+
+body table.views-table tr.active td.active {
+	background: darkseagreen;
+}
